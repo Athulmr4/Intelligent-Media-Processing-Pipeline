@@ -1,0 +1,30 @@
+version: '3.8'
+
+services:
+  app:
+    build: .
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - DB_PATH=./data/pipeline.db
+      - UPLOAD_DIR=./uploads
+      - QUEUE_CONCURRENCY=3
+      - MAX_RETRIES=3
+    volumes:
+      - app_uploads:/app/uploads
+      - app_data:/app/data
+      - app_logs:/app/logs
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000/health', (r) => process.exit(r.statusCode === 200 ? 0 : 1))"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  app_uploads:
+  app_data:
+  app_logs:

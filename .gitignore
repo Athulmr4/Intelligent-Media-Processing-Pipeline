@@ -1,0 +1,10 @@
+node_modules/
+dist/
+uploads/
+data/
+.env
+*.log
+coverage/
+.DS_Store
+Thumbs.db
+*.traineddata

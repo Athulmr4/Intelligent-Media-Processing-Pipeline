@@ -8,9 +8,11 @@ const router = Router();
 
 // ─── Rate Limiter ────────────────────────────────────────────────────
 
+// Rate limiter for general API access
+// Set high enough to not interfere with dashboard auto-polling
 const apiLimiter = rateLimit({
   windowMs: config.rateLimit.windowMs,
-  max: config.rateLimit.maxRequests,
+  max: 1000, // High limit — dashboard polls every 5s
   standardHeaders: true,
   legacyHeaders: false,
   message: {

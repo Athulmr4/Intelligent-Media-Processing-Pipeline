@@ -473,6 +473,12 @@ With more time, I would add:
 
 ---
 
-## License
+## User Interface with resulted information
+<img width="942" height="419" alt="Screenshot 2026-07-20 205843" src="https://github.com/user-attachments/assets/2941fa5f-37c4-4ad7-996f-a7570f7417ae" />
+<img width="920" height="216" alt="Screenshot 2026-07-20 205856" src="https://github.com/user-attachments/assets/a41135fb-9652-4034-81c3-9bc99172c686" />
+<img width="939" height="416" alt="Screenshot 2026-07-20 205912" src="https://github.com/user-attachments/assets/fefc13db-5b2b-4781-aa2f-b18512f2f53b" />
+<img width="937" height="424" alt="Screenshot 2026-07-20 205927" src="https://github.com/user-attachments/assets/094ca950-9a24-4be3-8900-4d7290376a2a" />
 
-MIT
+## Example vehicle image input
+<img width="1300" height="960" alt="image" src="https://github.com/user-attachments/assets/060b4532-ca22-46d1-a24a-a9bc5fd4a0fd" />
+<img width="720" height="540" alt="image" src="https://github.com/user-attachments/assets/b8581adb-716f-40dc-b2ed-8255a24291fc" />

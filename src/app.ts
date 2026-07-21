@@ -31,6 +31,11 @@ app.use(express.static(path.join(__dirname, '..', 'public')));
 // API Routes
 app.use(router);
 
+// Redirect root to dashboard
+app.get('/', (req, res) => {
+  res.redirect('/dashboard.html');
+});
+
 // Error handling
 app.use(notFoundHandler);
 app.use(errorHandler);

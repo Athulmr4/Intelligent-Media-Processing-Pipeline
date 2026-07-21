@@ -11,14 +11,17 @@ WORKDIR /app
 # Copy package files first for better layer caching
 COPY package.json package-lock.json* ./
 
-# Install dependencies
-RUN npm ci --only=production && npm cache clean --force
+# Install all dependencies (including devDependencies required for tsc)
+RUN npm ci
 
 # Copy source code
 COPY . .
 
 # Build TypeScript
 RUN npx tsc
+
+# Clean up devDependencies to keep the image size small
+RUN npm prune --omit=dev && npm cache clean --force
 
 # Create required directories
 RUN mkdir -p uploads data logs

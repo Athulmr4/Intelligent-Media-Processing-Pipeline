@@ -266,7 +266,8 @@ GET /health
 
 ### 2. Brightness Analysis (`brightness_analysis`)
 - **Method**: Statistical analysis of grayscale pixel distribution
-- **Checks**: Mean brightness (too dark < 40, too bright > 220), contrast (stddev < 20)
+- **Checks**: Mean brightness (too dark < 40, too bright > 220), contrast (stddev < 8 && range < 30)
+- **Real-World Tuning**: Contrast thresholds were specifically relaxed to accommodate real-world outdoor lighting conditions (e.g., cloudy days or shadows on vehicles) to prevent false positives.
 - **Output**: Dark/bright/low-contrast flags with specific values
 
 ### 3. Duplicate Detection (`duplicate_detection`)
@@ -281,18 +282,19 @@ GET /health
 - **Flags**: Too small, too large, extreme aspect ratio (>4:1), suspicious compression
 
 ### 5. Screenshot / Photo-of-Photo Detection (`screenshot_detection`)
-- **Heuristics** (scored, threshold ≥ 2.5):
+- **Heuristics** (scored, threshold ≥ 3.5):
   - Matches common screenshot resolutions (+1.0)
   - Uniform color borders at top/bottom (+1.5)
-  - Missing camera EXIF data (+1.0)
+  - Missing camera EXIF data (+0.5) - *Weighted lower since messaging apps (WhatsApp) strip EXIF.*
   - PNG format (+0.5)
-  - Moiré pattern via high-pass filter (+2.0)
+  - Moiré pattern via high-pass filter mean > 50 (+2.0) - *Threshold raised to prevent detailed vehicle textures from triggering false positives.*
 
 ### 6. OCR + Number Plate Validation (`ocr_plate_validation`)
 - **Engine**: Tesseract.js (falls back gracefully if unavailable)
+- **Preprocessing**: Multi-region processing using Sharp. The image is split into 4 distinct regions (Full, Bottom 40%, Bottom-Left, Bottom-Right) and normalized before OCR. This vastly improves the chances of detecting plates located in corners without warping the image.
 - **Validation**: Indian vehicle plate format (`XX 00 XX 0000`)
 - **State codes**: All 37 Indian state/UT codes validated
-- **Graceful degradation**: If OCR is unavailable, returns inconclusive rather than failing
+- **Limitations**: See *Trade-offs* section below regarding ALPR vs Document OCR.
 
 ### 7. Metadata / Tampering Analysis (`metadata_tampering`)
 - **Checks**: EXIF presence on JPEGs, channel statistical anomalies, alpha channel presence, color space consistency, density validation
@@ -309,7 +311,7 @@ GET /health
 | **Queue** | In-memory queue | BullMQ + Redis for persistence & distribution |
 | **Database** | SQLite | PostgreSQL for concurrent writes at scale |
 | **Storage** | Local filesystem | S3/GCS with signed URLs |
-| **OCR** | Tesseract.js (JS-based) | Google Vision API or AWS Textract |
+| **OCR (ALPR)**| Tesseract.js (JS-based) | YOLO Object Detection + AWS Textract / Google Vision |
 | **Auth** | None | JWT + API keys |
 | **Duplicate detection** | Average hash | pHash + feature-based matching |
 
@@ -318,7 +320,7 @@ GET /health
 1. **In-memory queue**: Jobs lost on server restart. Mitigation: On startup, re-queue any images in `processing` status.
 2. **SQLite write locks**: Single writer at a time. WAL mode helps reads but won't scale past ~100 writes/second.
 3. **Local file storage**: Won't work across multiple server instances. Need shared storage (S3).
-4. **Tesseract.js**: ~4-5 seconds per image for OCR. Could be optimized with native Tesseract bindings or cloud APIs.
+4. **OCR Limitations**: Tesseract.js is a *Document OCR* engine. It is designed for horizontal black text on white backgrounds. It struggles heavily with "in-the-wild" text—specifically painted, angled, curved, and low-contrast license plates on the physical bodies of auto-rickshaws. **Production Fix**: A true ALPR pipeline requires an Object Detection model (like YOLO) to draw a bounding box around the plate and flatten it *before* passing that specific crop to a specialized ALPR OCR engine.
 5. **Memory**: Perceptual hash comparison is O(n) against all stored hashes. Need a vector index (e.g., FAISS) at scale.
 
 ### Failure Handling

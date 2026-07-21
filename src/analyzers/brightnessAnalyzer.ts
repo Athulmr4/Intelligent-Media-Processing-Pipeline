@@ -36,11 +36,8 @@ export async function analyzeBrightness(imagePath: string): Promise<{
     const channel = stats.channels[0]; // Grayscale has one channel
 
     const mean = channel.mean;
-    const stdDev = Math.sqrt(
-      // Sharp provides sum and sumSq, but let's use the stats it gives
-      // The stdev can be approximated from the channel stats
-      channel.stdev ?? 0
-    );
+    // sharp .stats() already provides stdev directly
+    const stdDev = channel.stdev ?? 0;
     const minVal = channel.min;
     const maxVal = channel.max;
 
@@ -48,7 +45,8 @@ export async function analyzeBrightness(imagePath: string): Promise<{
 
     const isDark = mean < minBrightness;
     const isBright = mean > maxBrightness;
-    const isLowContrast = (maxVal - minVal) < 50 || stdDev < 20;
+    // Relaxed thresholds for real outdoor vehicle photos
+    const isLowContrast = (maxVal - minVal) < 30 && stdDev < 8;
 
     const issues: string[] = [];
     if (isDark) issues.push(`too dark (mean: ${mean.toFixed(1)}, threshold: ${minBrightness})`);

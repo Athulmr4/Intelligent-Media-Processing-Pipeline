@@ -39,7 +39,8 @@ async function detectMoire(imagePath: string): Promise<boolean> {
       .grayscale()
       .convolve({ width: 3, height: 3, kernel: [-1,-1,-1,-1,8,-1,-1,-1,-1] })
       .stats();
-    return stats.channels[0].mean > 30;
+    // Raised threshold: real photos with detailed textures (ads, text) have high frequency content
+    return stats.channels[0].mean > 50;
   } catch { return false; }
 }
 
@@ -61,14 +62,15 @@ export async function analyzeScreenshot(imagePath: string) {
     }
 
     const lacksExif = !metadata.exif;
-    if (lacksExif) { score += 1; flags.push('no_camera_exif'); }
+    // Lower weight: WhatsApp and messaging apps strip EXIF data from real photos
+    if (lacksExif) { score += 0.5; flags.push('no_camera_exif'); }
     if (metadata.format === 'png') { score += 0.5; flags.push('png_format'); }
 
     const hasMoire = await detectMoire(imagePath);
     if (hasMoire) { score += 2; flags.push('moire_pattern'); }
 
-    const isScreenshot = score >= 2.5;
-    const isPhotoOfPhoto = hasMoire && score >= 2;
+    const isScreenshot = score >= 3.5;
+    const isPhotoOfPhoto = hasMoire && score >= 3.5;
     const passed = !isScreenshot && !isPhotoOfPhoto;
     const confidence = Math.min(1, 0.5 + (score / maxScore) * 0.5);
 

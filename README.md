@@ -22,6 +22,7 @@ Built with **Node.js**, **TypeScript**, **Express**, **SQLite**, and **Sharp**.
 - [Docker Setup](#docker-setup)
 - [Project Structure](#project-structure)
 - [What I Would Improve](#what-i-would-improve)
+- [Test images with its ouput and failures](#test-images-with-its-output-and-failures)
 
 ---
 
@@ -484,7 +485,7 @@ With more time, I would add:
 
 ---
 
-## Test images and respective outputs
+## Test images with its output and failures
 
 ### Image Input 1
 <img width="596" height="394" alt="1c6c9347-7e01-49b4-8be7-74b0c01fbfdb" src="https://github.com/user-attachments/assets/69b5766b-abee-4f2d-b7a5-5bce44762e3a" />
@@ -493,6 +494,11 @@ With more time, I would add:
 <img width="596" height="394" alt="image" src="https://github.com/user-attachments/assets/4eccabad-1939-4fb6-a1c0-b9f8ae53b2c2" />
 <img width="596" height="394" alt="Screenshot 2026-07-21 200257" src="https://github.com/user-attachments/assets/7149f06d-cf03-4513-8c40-5410af1bb613" />
 
+### Failures
+- initially not able to detect numberplate, later improved
+- Sometimes detects numberplate, but not always
+- but eventually, its not even detecting numberplate because of OCR failure
+  
 ---
 
 ### Image Input 2
@@ -502,13 +508,20 @@ With more time, I would add:
 <img width="596" height="394" alt="Screenshot 2026-07-21 201054" src="https://github.com/user-attachments/assets/9f6032ac-0022-47c9-9013-727df818d40c" />
 <img width="596" height="394" alt="Screenshot 2026-07-21 200340" src="https://github.com/user-attachments/assets/23557fc4-a741-41b8-9e5c-3966a6dea2b5" />
 
+### Failures
+- initially detected numberplate but with incorrect output
+- later improved with more preprocessing techniques
+- but OCR failure caused to not detect numberplate
+
 ---
 
 ### Image Input 3
 <img width="596" height="394" alt="b5b61d94-f8b1-47c8-892b-0a3175c7c139" src="https://github.com/user-attachments/assets/1a64c0f7-0565-432b-abbf-121a9dd4a88d" />
 
----
-
 ### Output 3
 <img width="596" height="394" alt="image" src="https://github.com/user-attachments/assets/1d93f67a-b29a-4b13-94f3-cdd2b213dc51" />
 <img width="596" height="394" alt="image" src="https://github.com/user-attachments/assets/3417f2a7-abb3-498e-934e-eccc968618b6" />
+
+## Failures
+- same here, sometimes detected, sometimes not
+- once it detected as ai generated image, later it improved some modification

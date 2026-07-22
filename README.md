@@ -475,9 +475,9 @@ A few things I assumed while building this:
 <img width="596" height="394" alt="Screenshot 2026-07-21 200257" src="https://github.com/user-attachments/assets/7149f06d-cf03-4513-8c40-5410af1bb613" />
 
 ### Failures
-- initially not able to detect numberplate, later improved
-- Sometimes detects numberplate, but not always
-- but eventually, its not even detecting numberplate because of OCR failure
+- Initially it was not able to detect the numberplate, later it improved and started detecting the number plate.
+- However it does not always detect the number plate accurately.
+- But eventually, its not even detecting numberplate because of OCR failure(because of overengineering and preprocessing)
   
 ---
 
@@ -489,9 +489,9 @@ A few things I assumed while building this:
 <img width="596" height="394" alt="Screenshot 2026-07-21 200340" src="https://github.com/user-attachments/assets/23557fc4-a741-41b8-9e5c-3966a6dea2b5" />
 
 ### Failures
-- initially detected numberplate but with incorrect output
-- later improved with more preprocessing techniques
-- but OCR failure caused to not detect numberplate
+- Similarly it detected numberplate but with incorrect output.
+- Later improved with more preprocessing techniques.
+- But OCR failure caused to not detect numberplate.
 
 ---
 
@@ -503,5 +503,5 @@ A few things I assumed while building this:
 <img width="596" height="394" alt="image" src="https://github.com/user-attachments/assets/3417f2a7-abb3-498e-934e-eccc968618b6" />
 
 ## Failures
-- same here, sometimes detected, sometimes not
-- once it detected as ai generated image, later it improved some modification
+- At some point it detected, sometimes not because it just changes color degradation.
+- Once it detected as ai generated image, later it improved some modification.

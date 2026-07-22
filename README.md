@@ -3,7 +3,9 @@
 An asynchronous backend system for processing uploaded vehicle images, detecting quality issues, and providing structured analysis results.
 
 Built with **Node.js**, **TypeScript**, **Express**, **SQLite**, and **Sharp**.
-**Deployed link**: https://intelligent-media-processing-pipeline-j2va.onrender.com/dashboard.html
+
+**Deployed link**: <a href="https://intelligent-media-processing-pipeline-j2va.onrender.com/dashboard.html" target="_blank" rel="noopener noreferrer">https://intelligent-media-processing-pipeline-j2va.onrender.com/dashboard.html</a>
+
 
 ---
 

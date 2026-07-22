@@ -15,7 +15,7 @@ I built it using **Node.js**, **TypeScript**, **Express**, **SQLite**, and **Sha
 - [Quick Start](#quick-start)
 - [API Reference](#api-reference)
 - [Image Analyzers](#image-analyzers)
-- [Trade-offs & Design Decisions](#trade-offs--design-decisions)
+- [Major Design Decisions & Trade-offs](#major-design-decisions--trade-offs)
 - [AI Usage Disclosure](#ai-usage-disclosure)
 - [Running Tests](#running-tests)
 - [Docker Setup](#docker-setup)
@@ -27,7 +27,7 @@ I built it using **Node.js**, **TypeScript**, **Express**, **SQLite**, and **Sha
 
 ## Architecture
 
-### System Overview
+### Service Flow (System Overview)
 
 Here's a high-level look at how everything connects:
 
@@ -297,7 +297,7 @@ Here's a breakdown of the 7 checks running under the hood:
 
 ---
 
-## Trade-offs & Design Decisions
+## Major Design Decisions & Trade-offs
 
 Made some practical choices to build this project in limited timeframe.
 
@@ -328,15 +328,21 @@ Made some practical choices to build this project in limited timeframe.
 
 Full disclosure on how I used AI while building this.
 
-**Where AI helped:**
-- **Brainstorming**: Suggesting ideas for the architecture and figuring out which heuristics make sense for image analysis.
-- **Boilerplate**: Getting the Express setup and multer config out of the way quickly.
+**Where I used AI and what it helped with:**
+- **Brainstorming & Architecture**: Suggesting ideas for the architecture and figuring out which heuristics make sense for image analysis.
+- **Code Generation (Boilerplate)**: Getting the Express setup and multer config out of the way quickly.
 - **Dashboard UI**: Generating the HTML/CSS/JS for the frontend interface.
 
-**Where AI messed up (and how I fixed it):**
+**Where AI output was wrong (and how I fixed it):**
 1. **TypeScript types**: AI thought Express 5's `req.params` was a `string`, but it's different. The way it destructed puzzled the whole build, so I had to fix the type casting to further errors.
 2. **Math mistakes**: It tried to manually calculate standard deviation for the brightness analyzer, completely missing that `sharp.stats()` already gives us the `stdev` directly. Then I removed calculation part to make stats() function give standard deviation.
 3. **SQL quirks**: It used a `SUM` function in SQLite that was returning `null` when no rows matched. I had to wrap it in a `COALESCE` to ensure it returned `0`.
+
+**How I validated AI-generated code:**
+1. **TypeScript strict mode**: Using `tsc --noEmit` to catch type errors before runtime.
+2. **Manual testing**: Uploaded test images and verified each analyzer's output against expected behavior.
+3. **End-to-end verification**: Used `scripts/test-upload.js` to verify the complete flow.
+4. **Code review**: Read through all generated code, ensuring I understood each decision.
 
 ---
 

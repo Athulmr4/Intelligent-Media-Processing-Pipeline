@@ -56,7 +56,7 @@ Here's a high-level look at how everything connects:
 
 **My approach**: I went with a custom in-memory queue that handles concurrency. 
 
-**Why?**: Since this is a take-home assignment, throwing in Redis and BullMQ felt like it would just bloat the infrastructure without really proving much. Building a custom queue allowed me to show off how to handle:
+**Why?**: Since this is a just an assignment, using Redis and BullMQ felt like it would just complicate the infrastructure without really proving much. Building a custom queue was enough to handle:
 - Concurrency limits (it defaults to 3 jobs at a time)
 - Exponential backoff for retries (starts at 2s, max 3 tries)
 - A dead letter queue for jobs that completely fail
@@ -80,25 +80,25 @@ image_hashes (id, image_id, file_hash, perceptual_hash)
 A few key decisions here:
 - I turned on **WAL mode** in SQLite so concurrent reads don't block.
 - Added **indexes** on things we query often (status, file_hash, created_at).
-- Used a **JSON column** for details, which gives each analyzer the flexibility to store whatever data it needs.
-- Kept a **separate hash table** to make checking for duplicates fast.
+- Used a **JSON column** for details, so that analyzer can store whatever data it needs.
+- Created a **separate hash table** to check duplicates as fast as possible.
 
 ---
 
 ## Features
 
 ### Core Stuff
-- 🚀 RESTful API for handling uploads, checking status, and pulling results.
-- ⚙️ Fully asynchronous processing using a queue-based design.
-- 🖼️ 7 distinct image quality analyzers, complete with confidence scoring.
-- 💾 SQLite for storage, rigged up with the right schemas and indexes.
-- 🔗 Clean JSON responses that include HATEOAS links.
+-  RESTful API for handling uploads, checking status, and pulling results.
+-  Fully asynchronous processing using a queue-based design.
+-  7 distinct image quality analyzers, complete with confidence scoring.
+-  SQLite for storage with right schemas and indexes.
+-  Clean JSON responses that include HATEOAS links.
 
-### Extra Goodies
+### Extra Features
 - **Dashboard UI**: I built a real-time web dashboard so you can actually see the uploads, stats, and results in action.
-- **Rate Limiting**: Kept things sane with limits (10 uploads/min, 100 requests/15min).
+- **Rate Limiting**: Kept things normal with limits (10 uploads/min, 1000 requests/15min).
 - **Retry Mechanism**: Failing jobs back off exponentially before hitting a dead letter queue.
-- **Docker Setup**: Included a Dockerfile and docker-compose to make running it a breeze.
+- **Docker Setup**: Included a Dockerfile and docker-compose to make it run in any environment.
 - **Automated Tests**: Got coverage with Jest and Supertest.
 - **Structured Logging**: Winston handles the logs, complete with file rotation.
 - **Graceful Shutdown**: The server won't just kill active jobs or database connections when you hit Ctrl+C.
@@ -290,7 +290,7 @@ Here's a breakdown of the 7 checks running under the hood:
 - **How it works**: It uses Tesseract.js (but won't crash if it's missing). 
 - **Preprocessing**: Before running OCR, I use Sharp to split the image into 4 regions (Full, Bottom 40%, Bottom-Left, Bottom-Right) and normalize them. This makes a massive difference for finding plates tucked away in corners.
 - **Validation**: It checks against all 37 Indian state/UT codes and the standard format (`XX 00 XX 0000`).
-- **Limitations**: See the Trade-offs section. Tesseract isn't great at "in-the-wild" text.
+- **Limitations**: It still cannot detect plates under different shadows, sometimes cannot give accurate output.
 
 ### 7. Metadata / Tampering Analysis (`metadata_tampering`)
 - **How it works**: Looks for weird stuff like missing EXIF data on JPEGs, an unexpected alpha channel, or channel statistics that don't make sense. If it hits a threshold of 2.0, it flags the image as potentially tampered with.
@@ -299,46 +299,44 @@ Here's a breakdown of the 7 checks running under the hood:
 
 ## Trade-offs & Design Decisions
 
-Building this within a limited timeframe meant making some practical choices.
+Made some practical choices to build this project in limited timeframe.
 
 ### Things I simplified
 - **The Queue**: As mentioned, I used an in-memory queue instead of Redis + BullMQ. 
-- **The Database**: SQLite is great, but in a real production environment with high concurrent writes, PostgreSQL would be the way to go.
-- **Storage**: Files just save to the local disk. In the real world, this would be an S3 or GCS bucket with signed URLs.
+- **The Database**: Used SQLite because it is enough for limited concurrent writes, but with more timeframe and scale, I can upgrade to PostgreSQL or MySql.
+- **Storage**: Files just save to the local disk.
 - **OCR**: Tesseract.js is okay, but a true ALPR (Automated License Plate Recognition) system needs an object detection model like YOLO to crop the plate first before trying to read it.
 - **Auth**: I skipped authentication (JWT/API keys) to keep the focus on the processing pipeline.
 
 ### Where things might break at scale
-1. **Lost jobs**: Because the queue is in memory, if the server restarts, we lose active jobs. To mitigate this, the app could re-queue anything stuck in `processing` on startup.
+1. **Lost processes**: Because the queue is in memory, if the server restarts, we lose active processes. To prevent this, the app could re-queue anything stuck in `processing` on startup.
 2. **Database locks**: SQLite in WAL mode handles concurrent reads well, but writes are still single-threaded. We'd hit a bottleneck around 100 writes/sec.
 3. **Storage**: Local storage obviously won't work if we scale to multiple server instances.
-4. **OCR Accuracy**: Tesseract is meant for documents (black text, white background). It struggles hard with plates that are angled, dirty, or low contrast.
-5. **Memory usage**: Checking perceptual hashes means comparing against every other hash we have. At scale, we'd need a vector database like FAISS.
+4. **OCR Accuracy**: Tesseract is meant for documents (black text, white background). It can't detect and process plates that are angled, dirty, or low contrast.
+5. **Memory usage**: We can compare hash against every other hash we have. At scale, we'd need a vector database like FAISS.
 
 ### Handling failures gracefully
-- If one analyzer crashes, it doesn't take down the whole job. It just gets marked as inconclusive.
+- If one analyzer crashes, it doesn't take down the whole analyzers. It just gets marked as inconclusive.
 - Failed queue jobs get retried 3 times with a backoff delay.
 - If it completely fails, it goes to a dead letter queue so we can debug it later.
 - If the app hits an uncaught exception, it tries to finish active jobs before shutting down.
-- If an upload fails midway, we clean up the orphaned file so the disk doesn't fill up.
+- If an upload files midway, we clean up the orphaned file so the disk doesn't fill up.
 
 ---
 
 ## AI Usage Disclosure
 
-Full disclosure on how I used AI while building this. I treat AI as a productivity multiplier—it helps me move faster, but I don't let it write things I don't understand.
+Full disclosure on how I used AI while building this.
 
 **Where AI helped:**
-- **Brainstorming**: Bouncing ideas around for the architecture and figuring out which heuristics make sense for image analysis.
+- **Brainstorming**: Suggesting ideas for the architecture and figuring out which heuristics make sense for image analysis.
 - **Boilerplate**: Getting the Express setup and multer config out of the way quickly.
 - **Dashboard UI**: Generating the HTML/CSS/JS for the frontend interface.
 
 **Where AI messed up (and how I fixed it):**
-1. **TypeScript types**: AI thought Express 5's `req.params` was a `string`, but it's `string | string[]`. Its destructuring broke the build, so I had to go in and fix the type casting.
-2. **Math mistakes**: It tried to manually calculate standard deviation for the brightness analyzer, completely missing that `sharp.stats()` already gives us the `stdev` directly.
+1. **TypeScript types**: AI thought Express 5's `req.params` was a `string`, but it's different. The way it destructed puzzled the whole build, so I had to fix the type casting to further errors.
+2. **Math mistakes**: It tried to manually calculate standard deviation for the brightness analyzer, completely missing that `sharp.stats()` already gives us the `stdev` directly. Then I removed calculation part to make stats() function give standard deviation.
 3. **SQL quirks**: It used a `SUM` function in SQLite that was returning `null` when no rows matched. I had to wrap it in a `COALESCE` to ensure it returned `0`.
-
-**My philosophy here**: Every architectural decision, database schema choice, and error handling strategy was my own. AI just helped me type it out faster.
 
 ---
 
@@ -451,7 +449,7 @@ A few things I assumed while building this:
 3. We're only looking at standard Indian vehicle plates (`XX 00 XX 0000`).
 4. We won't hit more than 100 concurrent users, making SQLite perfectly fine.
 5. Tesseract.js is acceptable for a tech demo, even though it's not robust enough for a real-world ALPR system.
-6. The analysis thresholds might need tweaking, so they can be changed via environment variables.
+6. The analysis thresholds might need more preprocessing, so they can be changed via environment variables.
 
 ---
 

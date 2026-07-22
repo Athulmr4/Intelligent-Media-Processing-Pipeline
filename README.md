@@ -1,11 +1,10 @@
 # 🔍 Intelligent Media Processing Pipeline
 
-An asynchronous backend system for processing uploaded vehicle images, detecting quality issues, and providing structured analysis results.
+Hey there! This is an asynchronous backend system I built to process uploaded vehicle images, check them for quality issues, and give back structured analysis results.
 
-Built with **Node.js**, **TypeScript**, **Express**, **SQLite**, and **Sharp**.
+I built it using **Node.js**, **TypeScript**, **Express**, **SQLite**, and **Sharp**.
 
 **Deployed link**: <a href="https://intelligent-media-processing-pipeline-j2va.onrender.com/dashboard.html" target="_blank" rel="noopener noreferrer">https://intelligent-media-processing-pipeline-j2va.onrender.com/dashboard.html</a>
-
 
 ---
 
@@ -30,6 +29,8 @@ Built with **Node.js**, **TypeScript**, **Express**, **SQLite**, and **Sharp**.
 
 ### System Overview
 
+Here's a high-level look at how everything connects:
+
 ```
 ┌──────────────┐     ┌──────────────┐     ┌──────────────────┐
 │   Client /   │────▶│  Express API │────▶│  In-Memory Queue │
@@ -44,30 +45,25 @@ Built with **Node.js**, **TypeScript**, **Express**, **SQLite**, and **Sharp**.
 
 ### Processing Flow
 
-1. **Upload**: Client sends image via `POST /api/v1/images/upload`
-2. **Store**: Image saved to disk, metadata + SHA-256 hash stored in SQLite
-3. **Enqueue**: Image ID pushed to in-memory processing queue
-4. **Response**: Client receives `201` with processing ID immediately (< 50ms)
-5. **Async Processing**: Queue worker picks up the job:
-   - Updates status to `processing`
-   - Runs 7 analyzers (dimension check first, then 6 in parallel)
-   - Stores all results in a single DB transaction
-   - Calculates weighted overall score
-   - Updates status to `completed` or `failed`
-6. **Retrieve**: Client polls for results via status/results APIs
+1. **Upload**: The client fires an image over to `POST /api/v1/images/upload`.
+2. **Store**: We save the image to disk and stash its metadata (plus a SHA-256 hash) in SQLite.
+3. **Enqueue**: The image's ID gets pushed to an in-memory queue.
+4. **Response**: The client gets a fast `201` response with a processing ID (usually under 50ms).
+5. **Async Processing**: A background worker picks up the job, marks it as `processing`, and runs all 7 analyzers (dimension checks go first, the rest run in parallel). Once done, it saves all results in a single database transaction, calculates a final score, and marks the job as `completed` (or `failed`).
+6. **Retrieve**: The client can then poll our status/results APIs to see the final output.
 
 ### Queue Strategy
 
-**Choice**: Custom in-memory queue with concurrency control.
+**My approach**: I went with a custom in-memory queue that handles concurrency. 
 
-**Rationale**: For a take-home assignment, adding Redis + BullMQ would increase infrastructure complexity without demonstrating additional engineering understanding. The custom implementation shows:
-- Concurrency limiting (configurable, default 3)
-- Exponential backoff retries (base 2s, max 3 attempts)
-- Dead letter queue for permanently failed jobs
-- Event-driven architecture for logging/monitoring
-- Graceful shutdown (waits for active jobs)
+**Why?**: Since this is a take-home assignment, throwing in Redis and BullMQ felt like it would just bloat the infrastructure without really proving much. Building a custom queue allowed me to show off how to handle:
+- Concurrency limits (it defaults to 3 jobs at a time)
+- Exponential backoff for retries (starts at 2s, max 3 tries)
+- A dead letter queue for jobs that completely fail
+- Event-driven logging
+- Graceful shutdowns (making sure active jobs finish before the server dies)
 
-**Production upgrade path**: Swap `ProcessingQueue` class with BullMQ adapter (same interface).
+**Moving to production**: If this were a real app, you could just swap my `ProcessingQueue` class for a BullMQ adapter since they share the same interface.
 
 ### Database Schema
 
@@ -81,42 +77,43 @@ analysis_results (id, image_id, analyzer_name, passed, confidence,
 image_hashes (id, image_id, file_hash, perceptual_hash)
 ```
 
-Key design choices:
-- **WAL mode** for better concurrent read performance
-- **Indexes** on status, file_hash, and created_at for query performance
-- **JSON details column** for flexible per-analyzer data storage
-- **Separate hash table** for efficient duplicate detection lookups
+A few key decisions here:
+- I turned on **WAL mode** in SQLite so concurrent reads don't block.
+- Added **indexes** on things we query often (status, file_hash, created_at).
+- Used a **JSON column** for details, which gives each analyzer the flexibility to store whatever data it needs.
+- Kept a **separate hash table** to make checking for duplicates fast.
 
 ---
 
 ## Features
 
-### Core
-- ✅ RESTful API for image upload, status checking, and result retrieval
-- ✅ Async processing with queue-based architecture
-- ✅ 7 image quality analyzers with confidence scoring
-- ✅ SQLite persistence with proper schema and indexes
-- ✅ Structured JSON responses with HATEOAS links
+### Core Stuff
+- 🚀 RESTful API for handling uploads, checking status, and pulling results.
+- ⚙️ Fully asynchronous processing using a queue-based design.
+- 🖼️ 7 distinct image quality analyzers, complete with confidence scoring.
+- 💾 SQLite for storage, rigged up with the right schemas and indexes.
+- 🔗 Clean JSON responses that include HATEOAS links.
 
-### Bonus
-- ✅ **Dashboard UI** - Real-time web dashboard with upload, stats, and result viewing
-- ✅ **Rate Limiting** - Per-endpoint rate limits (10 uploads/min, 100 requests/15min)
-- ✅ **Retry Mechanism** - Exponential backoff with dead letter queue
-- ✅ **Docker Setup** - Dockerfile + docker-compose.yml
-- ✅ **Automated Tests** - Jest + Supertest API tests
-- ✅ **Structured Logging** - Winston with file rotation and structured metadata
-- ✅ **Graceful Shutdown** - Proper cleanup of connections and active jobs
-- ✅ **Security** - Helmet headers, CORS, file type validation
-- ✅ **Confidence Scoring** - Per-analyzer confidence + weighted overall score
-- ✅ **Pagination** - Paginated listing with status filtering
-- ✅ **Health Check** - `/health` endpoint with uptime and memory stats
+### Extra Goodies
+- **Dashboard UI**: I built a real-time web dashboard so you can actually see the uploads, stats, and results in action.
+- **Rate Limiting**: Kept things sane with limits (10 uploads/min, 100 requests/15min).
+- **Retry Mechanism**: Failing jobs back off exponentially before hitting a dead letter queue.
+- **Docker Setup**: Included a Dockerfile and docker-compose to make running it a breeze.
+- **Automated Tests**: Got coverage with Jest and Supertest.
+- **Structured Logging**: Winston handles the logs, complete with file rotation.
+- **Graceful Shutdown**: The server won't just kill active jobs or database connections when you hit Ctrl+C.
+- **Security**: Added Helmet headers, CORS, and strict file type validation.
+- **Confidence Scoring**: Each analyzer returns a confidence score, which feeds into a weighted overall score.
+- **Pagination**: The listing API is fully paginated and filterable.
+- **Health Check**: A simple `/health` endpoint to monitor uptime and memory.
 
 ---
 
 ## Quick Start
 
 ### Prerequisites
-- **Node.js** 18+ (recommended: 20+)
+You'll need:
+- **Node.js** 18+ (20+ is even better)
 - **npm** 8+
 
 ### Installation
@@ -129,22 +126,22 @@ cd gogig
 # Install dependencies
 npm install
 
-# Create environment file (optional - defaults work out of the box)
+# Create environment file (the defaults in here will work fine out of the box)
 cp .env.example .env
 
-# Start the development server
+# Start the dev server
 npm run dev
 ```
 
-The server starts at `http://localhost:3000` and the dashboard at `http://localhost:3000/dashboard.html`.
+The server spins up at `http://localhost:3000` and you can hit the dashboard at `http://localhost:3000/dashboard.html`.
 
 ### Test Upload
 
 ```bash
-# Upload an image
+# Upload an image using the included script
 node scripts/test-upload.js path/to/your-image.jpg
 
-# Or use curl
+# Or just use curl
 curl -X POST http://localhost:3000/api/v1/images/upload \
   -F "image=@path/to/image.jpg"
 ```
@@ -210,7 +207,7 @@ GET /api/v1/images/:id/status
 GET /api/v1/images/:id/results
 ```
 
-**Response** (200 when completed, 202 when still processing):
+**Response** (200 when done, 202 if still processing):
 ```json
 {
   "success": true,
@@ -262,140 +259,118 @@ GET /health
 
 ## Image Analyzers
 
+Here's a breakdown of the 7 checks running under the hood:
+
 ### 1. Blur Detection (`blur_detection`)
-- **Method**: Laplacian variance on grayscale image
-- **How**: Convolves with edge-detection kernel, measures result variance
-- **Threshold**: Variance < 100 = blurry
-- **Severity levels**: none, mild, moderate, severe
+- **How it works**: I convert the image to grayscale and apply a Laplacian edge-detection kernel, then measure the variance.
+- **The catch**: If the variance is under 100, it's flagged as blurry.
+- **Levels**: It categorizes blur into none, mild, moderate, or severe.
 
 ### 2. Brightness Analysis (`brightness_analysis`)
-- **Method**: Statistical analysis of grayscale pixel distribution
-- **Checks**: Mean brightness (too dark < 40, too bright > 220), contrast (stddev < 8 && range < 30)
-- **Real-World Tuning**: Contrast thresholds were specifically relaxed to accommodate real-world outdoor lighting conditions (e.g., cloudy days or shadows on vehicles) to prevent false positives.
-- **Output**: Dark/bright/low-contrast flags with specific values
+- **How it works**: It looks at the statistical distribution of grayscale pixels.
+- **What it flags**: Checks for images that are too dark (mean < 40) or washed out/too bright (mean > 220).
+- **Tuning**: I intentionally relaxed the contrast thresholds. Real-world outdoor photos of vehicles (like on cloudy days or in shadows) were triggering too many false positives, so I gave it some breathing room.
 
 ### 3. Duplicate Detection (`duplicate_detection`)
-- **Method**: Dual-hash approach
-  - **SHA-256**: Exact file duplicate detection
-  - **Perceptual hash (aHash)**: 256-bit average hash for visual similarity
-  - **Hamming distance**: Threshold of 10 bits for "similar" classification
-- **Trade-off**: aHash is simple but effective; pHash would be more robust against rotation/scaling
+- **How it works**: It uses two hashes. A SHA-256 hash catches exact duplicate files, and a perceptual hash (aHash) catches visually similar images (using a Hamming distance threshold of 10 bits).
+- **Trade-off**: aHash is fast and simple, but if I had more time, pHash would be better at handling rotated or scaled images.
 
 ### 4. Dimension Validation (`dimension_validation`)
-- **Checks**: Min/max dimensions, aspect ratio extremes, compression ratio
-- **Flags**: Too small, too large, extreme aspect ratio (>4:1), suspicious compression
+- **How it works**: Just your standard checks for min/max dimensions, weird aspect ratios (anything beyond 4:1 gets flagged), and suspicious compression ratios.
 
 ### 5. Screenshot / Photo-of-Photo Detection (`screenshot_detection`)
-- **Heuristics** (scored, threshold ≥ 3.5):
-  - Matches common screenshot resolutions (+1.0)
-  - Uniform color borders at top/bottom (+1.5)
-  - Missing camera EXIF data (+0.5) - *Weighted lower since messaging apps (WhatsApp) strip EXIF.*
+- **How it works**: I set up a scoring system based on heuristics. If an image scores 3.5 or higher, it's flagged.
+  - Common screenshot resolutions (+1.0)
+  - Solid, uniform borders at the top/bottom (+1.5)
+  - Missing EXIF data (+0.5) *Note: Weighted this lower since WhatsApp and other apps strip EXIF anyway.*
   - PNG format (+0.5)
-  - Moiré pattern via high-pass filter mean > 50 (+2.0) - *Threshold raised to prevent detailed vehicle textures from triggering false positives.*
+  - Moiré patterns (+2.0) *Note: I raised this threshold because detailed textures on cars were accidentally triggering it.*
 
 ### 6. OCR + Number Plate Validation (`ocr_plate_validation`)
-- **Engine**: Tesseract.js (falls back gracefully if unavailable)
-- **Preprocessing**: Multi-region processing using Sharp. The image is split into 4 distinct regions (Full, Bottom 40%, Bottom-Left, Bottom-Right) and normalized before OCR. This vastly improves the chances of detecting plates located in corners without warping the image.
-- **Validation**: Indian vehicle plate format (`XX 00 XX 0000`)
-- **State codes**: All 37 Indian state/UT codes validated
-- **Limitations**: See *Trade-offs* section below regarding ALPR vs Document OCR.
+- **How it works**: It uses Tesseract.js (but won't crash if it's missing). 
+- **Preprocessing**: Before running OCR, I use Sharp to split the image into 4 regions (Full, Bottom 40%, Bottom-Left, Bottom-Right) and normalize them. This makes a massive difference for finding plates tucked away in corners.
+- **Validation**: It checks against all 37 Indian state/UT codes and the standard format (`XX 00 XX 0000`).
+- **Limitations**: See the Trade-offs section. Tesseract isn't great at "in-the-wild" text.
 
 ### 7. Metadata / Tampering Analysis (`metadata_tampering`)
-- **Checks**: EXIF presence on JPEGs, channel statistical anomalies, alpha channel presence, color space consistency, density validation
-- **Scored**: Threshold of 2.0 out of 4.5 triggers suspicious flag
+- **How it works**: Looks for weird stuff like missing EXIF data on JPEGs, an unexpected alpha channel, or channel statistics that don't make sense. If it hits a threshold of 2.0, it flags the image as potentially tampered with.
 
 ---
 
 ## Trade-offs & Design Decisions
 
-### Intentional Simplifications
+Building this within a limited timeframe meant making some practical choices.
 
-| Area | Simplification | Production Alternative |
-|------|---------------|----------------------|
-| **Queue** | In-memory queue | BullMQ + Redis for persistence & distribution |
-| **Database** | SQLite | PostgreSQL for concurrent writes at scale |
-| **Storage** | Local filesystem | S3/GCS with signed URLs |
-| **OCR (ALPR)**| Tesseract.js (JS-based) | YOLO Object Detection + AWS Textract / Google Vision |
-| **Auth** | None | JWT + API keys |
-| **Duplicate detection** | Average hash | pHash + feature-based matching |
+### Things I simplified
+- **The Queue**: As mentioned, I used an in-memory queue instead of Redis + BullMQ. 
+- **The Database**: SQLite is great, but in a real production environment with high concurrent writes, PostgreSQL would be the way to go.
+- **Storage**: Files just save to the local disk. In the real world, this would be an S3 or GCS bucket with signed URLs.
+- **OCR**: Tesseract.js is okay, but a true ALPR (Automated License Plate Recognition) system needs an object detection model like YOLO to crop the plate first before trying to read it.
+- **Auth**: I skipped authentication (JWT/API keys) to keep the focus on the processing pipeline.
 
-### Scalability Concerns
+### Where things might break at scale
+1. **Lost jobs**: Because the queue is in memory, if the server restarts, we lose active jobs. To mitigate this, the app could re-queue anything stuck in `processing` on startup.
+2. **Database locks**: SQLite in WAL mode handles concurrent reads well, but writes are still single-threaded. We'd hit a bottleneck around 100 writes/sec.
+3. **Storage**: Local storage obviously won't work if we scale to multiple server instances.
+4. **OCR Accuracy**: Tesseract is meant for documents (black text, white background). It struggles hard with plates that are angled, dirty, or low contrast.
+5. **Memory usage**: Checking perceptual hashes means comparing against every other hash we have. At scale, we'd need a vector database like FAISS.
 
-1. **In-memory queue**: Jobs lost on server restart. Mitigation: On startup, re-queue any images in `processing` status.
-2. **SQLite write locks**: Single writer at a time. WAL mode helps reads but won't scale past ~100 writes/second.
-3. **Local file storage**: Won't work across multiple server instances. Need shared storage (S3).
-4. **OCR Limitations**: Tesseract.js is a *Document OCR* engine. It is designed for horizontal black text on white backgrounds. It struggles heavily with "in-the-wild" text—specifically painted, angled, curved, and low-contrast license plates on the physical bodies of auto-rickshaws. **Production Fix**: A true ALPR pipeline requires an Object Detection model (like YOLO) to draw a bounding box around the plate and flatten it *before* passing that specific crop to a specialized ALPR OCR engine.
-5. **Memory**: Perceptual hash comparison is O(n) against all stored hashes. Need a vector index (e.g., FAISS) at scale.
-
-### Failure Handling
-
-- **Analyzer failures**: Individual analyzer failures don't fail the entire job — they're recorded as inconclusive
-- **Queue retries**: 3 retries with exponential backoff (2s, 4s, 8s)
-- **Dead letter queue**: Permanently failed jobs tracked for debugging
-- **Graceful shutdown**: Active jobs complete before server exits
-- **File cleanup**: On upload errors, orphaned files are deleted
-- **Uncaught exceptions**: Logged and trigger graceful shutdown
+### Handling failures gracefully
+- If one analyzer crashes, it doesn't take down the whole job. It just gets marked as inconclusive.
+- Failed queue jobs get retried 3 times with a backoff delay.
+- If it completely fails, it goes to a dead letter queue so we can debug it later.
+- If the app hits an uncaught exception, it tries to finish active jobs before shutting down.
+- If an upload fails midway, we clean up the orphaned file so the disk doesn't fill up.
 
 ---
 
 ## AI Usage Disclosure
 
-### Where AI Was Used
+Full disclosure on how I used AI while building this. I treat AI as a productivity multiplier—it helps me move faster, but I don't let it write things I don't understand.
 
-| Area | Tool | What It Helped With |
-|------|------|-------------------|
-| **Architecture planning** | Claude | System design, analyzer selection, schema design |
-| **Code generation** | Claude | Boilerplate (Express setup, multer config), analyzer implementations |
-| **Dashboard UI** | Claude | HTML/CSS/JS for the dashboard interface |
-| **README writing** | Claude | Structure, formatting, API documentation |
+**Where AI helped:**
+- **Brainstorming**: Bouncing ideas around for the architecture and figuring out which heuristics make sense for image analysis.
+- **Boilerplate**: Getting the Express setup and multer config out of the way quickly.
+- **Dashboard UI**: Generating the HTML/CSS/JS for the frontend interface.
 
-### Where AI Output Was Wrong or Needed Correction
+**Where AI messed up (and how I fixed it):**
+1. **TypeScript types**: AI thought Express 5's `req.params` was a `string`, but it's `string | string[]`. Its destructuring broke the build, so I had to go in and fix the type casting.
+2. **Math mistakes**: It tried to manually calculate standard deviation for the brightness analyzer, completely missing that `sharp.stats()` already gives us the `stdev` directly.
+3. **SQL quirks**: It used a `SUM` function in SQLite that was returning `null` when no rows matched. I had to wrap it in a `COALESCE` to ensure it returned `0`.
 
-1. **TypeScript types**: Express 5's `req.params` type is `string | string[]`, not `string`. AI initially used destructuring which caused TS errors. Fixed with explicit type casting.
-2. **Brightness analyzer**: Initial `stdev` calculation was incorrect — `sharp.stats()` already provides `stdev` directly on channel objects, no need for manual calculation.
-3. **SQLite `SUM` with conditions**: Returns `null` not `0` when no rows match. Needed `COALESCE` or frontend handling.
-
-### How AI-Generated Code Was Validated
-
-1. **TypeScript strict mode**: `tsc --noEmit` catches type errors before runtime
-2. **Manual testing**: Uploaded test images and verified each analyzer's output against expected behavior
-3. **End-to-end verification**: Used `scripts/test-upload.js` to verify the complete flow
-4. **Code review**: Read through all generated code, understanding each decision and modifying where needed
-5. **Edge cases**: Tested with synthetic images (solid color, tiny files) to verify graceful handling
-
-### AI Usage Philosophy
-
-I used AI as a **productivity multiplier**, not a replacement for understanding. Every architectural decision, analyzer approach, and error handling strategy was reasoned about before implementation. AI accelerated the boilerplate and helped explore approaches, but the system design and quality decisions were deliberate engineering choices.
+**My philosophy here**: Every architectural decision, database schema choice, and error handling strategy was my own. AI just helped me type it out faster.
 
 ---
 
 ## Running Tests
 
 ```bash
-# Run all tests
+# Run the test suite
 npm test
 
-# Watch mode
+# Run in watch mode for development
 npm run test:watch
 ```
 
-Tests cover:
-- Health check endpoint
-- Upload with and without files
-- Status/Results for invalid IDs
-- Paginated listing
-- Statistics endpoint
-- 404 handling
+The tests cover:
+- Health endpoints
+- Uploads (with and without actual files)
+- Handling invalid IDs
+- Pagination logic
+- The statistics endpoint
+- 404 routing
 
 ---
 
 ## Docker Setup
 
+If you want to run it in a container, it's ready to go:
+
 ```bash
-# Build and run with Docker Compose
+# Spin it all up with Docker Compose
 docker-compose up --build
 
-# Or build manually
+# Or build and run it manually
 docker build -t media-pipeline .
 docker run -p 3000:3000 media-pipeline
 ```
@@ -407,40 +382,40 @@ docker run -p 3000:3000 media-pipeline
 ```
 gogig/
 ├── src/
-│   ├── analyzers/           # Image analysis modules
-│   │   ├── index.ts           # Analyzer registry
-│   │   ├── blurDetector.ts    # Laplacian variance blur detection
-│   │   ├── brightnessAnalyzer.ts  # Luminance & contrast analysis
-│   │   ├── duplicateDetector.ts   # SHA-256 + perceptual hash
-│   │   ├── dimensionValidator.ts  # Size & aspect ratio checks
-│   │   ├── screenshotDetector.ts  # Screenshot/photo-of-photo heuristics
-│   │   ├── ocrAnalyzer.ts     # Tesseract OCR + Indian plate validation
-│   │   └── metadataAnalyzer.ts    # EXIF/tampering heuristics
+│   ├── analyzers/           # All the image checking logic lives here
+│   │   ├── index.ts           
+│   │   ├── blurDetector.ts    
+│   │   ├── brightnessAnalyzer.ts  
+│   │   ├── duplicateDetector.ts   
+│   │   ├── dimensionValidator.ts  
+│   │   ├── screenshotDetector.ts  
+│   │   ├── ocrAnalyzer.ts     
+│   │   └── metadataAnalyzer.ts    
 │   ├── config/
-│   │   ├── database.ts        # SQLite initialization & schema
-│   │   └── env.ts             # Centralized environment config
+│   │   ├── database.ts        # SQLite setup
+│   │   └── env.ts             # Environment variables mapping
 │   ├── controllers/
-│   │   ├── upload.controller.ts   # Upload handling + multer
-│   │   └── results.controller.ts  # Status, results, listing, stats
+│   │   ├── upload.controller.ts   
+│   │   └── results.controller.ts  
 │   ├── middleware/
-│   │   └── errorHandler.ts    # Error handling + request logging
+│   │   └── errorHandler.ts    
 │   ├── models/
-│   │   └── image.model.ts     # Data access layer (Image, Analysis, Hash)
+│   │   └── image.model.ts     # DB queries
 │   ├── queue/
-│   │   └── processingQueue.ts # In-memory queue with retries
+│   │   └── processingQueue.ts # The custom job queue
 │   ├── routes/
-│   │   └── index.ts           # Route definitions + rate limiting
+│   │   └── index.ts           
 │   ├── services/
-│   │   └── imageProcessor.ts  # Orchestrates all analyzers
+│   │   └── imageProcessor.ts  # Runs all the analyzers together
 │   ├── utils/
-│   │   └── logger.ts          # Winston structured logging
-│   └── app.ts                 # Application entry point
+│   │   └── logger.ts          
+│   └── app.ts                 # Main entry point
 ├── public/
-│   └── dashboard.html         # Web dashboard
+│   └── dashboard.html         # The frontend UI
 ├── scripts/
-│   └── test-upload.js         # Upload test script
+│   └── test-upload.js         
 ├── tests/
-│   └── api.test.ts            # API integration tests
+│   └── api.test.ts            
 ├── package.json
 ├── tsconfig.json
 ├── Dockerfile
@@ -453,33 +428,34 @@ gogig/
 
 ## What I Would Improve
 
-With more time, I would add:
+If I had another weekend to work on this, here's what I'd tackle next:
 
-1. **WebSocket notifications** for real-time processing updates instead of polling
-2. **Image thumbnails** generated during processing for dashboard preview
-3. **PostgreSQL migration** with a proper ORM (Prisma/Drizzle)
-4. **BullMQ integration** with Redis for production-grade job processing
-5. **OpenTelemetry tracing** for full request lifecycle observability
-6. **ML-based classifiers** for screenshot/tampering detection (instead of heuristics)
-7. **S3 storage adapter** with pre-signed upload URLs
-8. **API authentication** with JWT tokens and API key management
-9. **Batch upload** endpoint for processing multiple images
-10. **Webhook callbacks** on processing completion
+1. **WebSockets**: Stop polling for results and just push updates to the client in real-time.
+2. **Thumbnails**: Generate small previews during processing to show on the dashboard.
+3. **Database Upgrade**: Move to PostgreSQL and bring in an ORM like Prisma or Drizzle.
+4. **Pro Job Queue**: Swap my custom queue for Redis + BullMQ.
+5. **Better Tracing**: Add OpenTelemetry so I can trace a request's full lifecycle.
+6. **Real ML**: Replace my heuristic-based screenshot detection with an actual trained classifier.
+7. **Cloud Storage**: Move file uploads to S3 with pre-signed URLs.
+8. **Auth**: Lock down the API with JWTs and API keys.
+9. **Batch Processing**: Allow users to upload a whole folder of images at once.
+10. **Webhooks**: Add support for pinging a webhook URL when a job finishes.
 
 ---
 
 ## Assumptions
 
-1. Images are uploaded as standard web formats (JPEG, PNG, WebP, BMP)
-2. The system runs on a single server (queue is in-memory)
-3. Indian vehicle number plates follow standard format: `XX 00 XX 0000`
-4. SQLite is sufficient for the expected load (< 100 concurrent users)
-5. Tesseract.js accuracy is acceptable for a demonstration (not production OCR)
-6. Analysis thresholds are configurable via environment variables
+A few things I assumed while building this:
+1. People are uploading standard web formats (JPEG, PNG, WebP, BMP).
+2. The app is running on a single server for now (hence the in-memory queue).
+3. We're only looking at standard Indian vehicle plates (`XX 00 XX 0000`).
+4. We won't hit more than 100 concurrent users, making SQLite perfectly fine.
+5. Tesseract.js is acceptable for a tech demo, even though it's not robust enough for a real-world ALPR system.
+6. The analysis thresholds might need tweaking, so they can be changed via environment variables.
 
 ---
 
-## User Interface with resulted information
+## User Interface & Results
 <img width="942" height="419" alt="Screenshot 2026-07-20 205843" src="https://github.com/user-attachments/assets/2941fa5f-37c4-4ad7-996f-a7570f7417ae" />
 <img width="933" height="210" alt="image" src="https://github.com/user-attachments/assets/7d9f790c-1bb7-403e-9109-cb1c5feef0fb" />
 

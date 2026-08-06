@@ -505,3 +505,8 @@ A few things I assumed while building this:
 ## Failures
 - At some point it detected, sometimes not because it just changes color degradation.
 - Once it detected as ai generated image, later it improved some modification.
+  
+## Change Required 
+- The deployed link I uploaded is working as before
+- However the results are not accurate as mentioned earlier with the drawbacks mentioned.
+- So there is no change made.

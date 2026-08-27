@@ -12,12 +12,16 @@ async function checkUniformBorders(imagePath: string) {
   const metadata = await sharp(imagePath).metadata();
   const w = metadata.width || 0, h = metadata.height || 0;
   if (!w || !h) return { top: false, bottom: false };
-  const stripH = Math.min(40, Math.floor(h * 0.05));
+  const stripH = Math.min(30, Math.floor(h * 0.04));
 
   async function isUniform(left: number, top: number, width: number, height: number) {
     try {
-      const stats = await sharp(imagePath).extract({ left, top, width, height }).grayscale().stats();
-      return stats.channels[0].stdev < 10;
+      const image = sharp(imagePath).extract({ left, top, width, height });
+      const stats = await image.stats();
+      // Require all channels to have very low stdev and check grayscale as well
+      const allChannelsUniform = stats.channels.every(c => c.stdev < 8);
+      const grayStats = await sharp(imagePath).extract({ left, top, width, height }).grayscale().stats();
+      return allChannelsUniform && grayStats.channels[0].stdev < 5;
     } catch { return false; }
   }
 
@@ -39,8 +43,10 @@ async function detectMoire(imagePath: string): Promise<boolean> {
       .grayscale()
       .convolve({ width: 3, height: 3, kernel: [-1,-1,-1,-1,8,-1,-1,-1,-1] })
       .stats();
-    // Raised threshold: real photos with detailed textures (ads, text) have high frequency content
-    return stats.channels[0].mean > 50;
+    // Higher threshold reduces false positives on uniform or mildly textured images;
+    // additionally require non-trivial stdev to avoid flagging flat regions
+    const ch = stats.channels[0];
+    return ch.mean > 75 && ch.stdev > 20;
   } catch { return false; }
 }
 

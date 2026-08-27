@@ -115,20 +115,27 @@ export async function analyzeDuplicates(
     const isExactDuplicate = exactMatches.length > 0;
     const duplicateOf = exactMatches.map(m => m.image_id);
 
+    // Detect degenerate hash (uniform image produces all 0s or all Fs) – skip similarity check
+    const isDegenerateHash = /^0+$/.test(perceptualHash) || /^f+$/i.test(perceptualHash);
+
     // Check for similar images (perceptual hash comparison)
     const allHashes = HashModel.getAll(imageId);
     const similarTo: Array<{ imageId: string; distance: number }> = [];
 
     const SIMILARITY_THRESHOLD = 10; // Hamming distance threshold (out of 256 bits)
 
-    for (const existing of allHashes) {
-      if (existing.perceptual_hash) {
-        const distance = hammingDistance(perceptualHash, existing.perceptual_hash);
-        if (distance <= SIMILARITY_THRESHOLD && distance > 0) {
-          similarTo.push({
-            imageId: existing.image_id,
-            distance,
-          });
+    if (!isDegenerateHash) {
+      for (const existing of allHashes) {
+        if (existing.perceptual_hash) {
+          // Skip comparison against degenerate hashes
+          if (/^0+$/.test(existing.perceptual_hash) || /^f+$/i.test(existing.perceptual_hash)) continue;
+          const distance = hammingDistance(perceptualHash, existing.perceptual_hash);
+          if (distance <= SIMILARITY_THRESHOLD && distance > 0) {
+            similarTo.push({
+              imageId: existing.image_id,
+              distance,
+            });
+          }
         }
       }
     }

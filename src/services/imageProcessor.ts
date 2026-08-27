@@ -50,12 +50,15 @@ export async function processImage(imageId: string): Promise<void> {
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error);
       errors.push(`${name}: ${msg}`);
+      // Mark as failed with 0 confidence but do NOT inflate overall score
+      // Use passed: false with low confidence so it counts as an issue but doesn't dominate scoring,
+      // or use inconclusive flag; here we record as low-confidence failure
       results.push({
         image_id: imageId,
         analyzer_name: name,
-        passed: true, // Don't penalize for analyzer failures
-        confidence: 0,
-        details: { error: msg, verdict: 'Analyzer failed - result inconclusive' },
+        passed: false,
+        confidence: 0.1,
+        details: { error: msg, verdict: 'Analyzer failed - result inconclusive', inconclusive: true },
         execution_time_ms: Date.now() - start,
       });
       logger.warn(`Analyzer ${name} failed`, { imageId, error: msg });
@@ -88,14 +91,15 @@ export async function processImage(imageId: string): Promise<void> {
   // Save all results in a single transaction
   AnalysisModel.createBatch(results);
 
-  // Calculate overall score
+  // Calculate overall score — weight by confidence, but ignore inconclusive (confidence <0.2) low weight
   const totalAnalyzers = results.length;
   const passedCount = results.filter(r => r.passed).length;
   const weightedScore = results.reduce((sum, r) => {
-    const weight = r.confidence || 0.5;
+    const weight = r.confidence != null ? r.confidence : 0.5;
+    // Inconclusive analyzer failures have 0.1 weight but shouldn't inflate score if passed=false
     return sum + (r.passed ? weight : 0);
   }, 0);
-  const maxWeight = results.reduce((sum, r) => sum + (r.confidence || 0.5), 0);
+  const maxWeight = results.reduce((sum, r) => sum + (r.confidence != null ? r.confidence : 0.5), 0);
   const overallScore = maxWeight > 0 ? Math.round((weightedScore / maxWeight) * 100) / 100 : 0;
   const issuesFound = totalAnalyzers - passedCount;
 

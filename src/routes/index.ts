@@ -12,7 +12,7 @@ const router = Router();
 // Set high enough to not interfere with dashboard auto-polling
 const apiLimiter = rateLimit({
   windowMs: config.rateLimit.windowMs,
-  max: 1000, // High limit — dashboard polls every 5s
+  max: config.rateLimit.maxRequests > 100 ? config.rateLimit.maxRequests : 1000, // Use config, but keep high enough for dashboard polling
   standardHeaders: true,
   legacyHeaders: false,
   message: {

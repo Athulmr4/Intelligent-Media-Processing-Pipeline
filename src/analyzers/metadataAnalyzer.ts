@@ -17,11 +17,11 @@ export async function analyzeMetadata(imagePath: string) {
     const flags: string[] = [];
     let score = 0;
 
-    // 1. Check for stripped EXIF (common after editing)
+    // 1. Check for stripped EXIF (common after editing) — low weight since many apps strip EXIF
     const hasExif = !!metadata.exif;
     const hasIcc = !!metadata.icc;
     if (!hasExif && metadata.format === 'jpeg') {
-      score += 1;
+      score += 0.5;
       flags.push('jpeg_without_exif');
     }
 
@@ -39,10 +39,15 @@ export async function analyzeMetadata(imagePath: string) {
       }
 
       // Very low stdev across all channels can indicate synthetic images
-      const allLowStdev = stdevs.every(s => s < 15);
-      if (allLowStdev) {
+      // Raised threshold: stdev <8 is more reliably synthetic; <15 was too sensitive for natural low-contrast photos
+      const allVeryLowStdev = stdevs.every(s => s < 8);
+      const allLowStdev = !allVeryLowStdev && stdevs.every(s => s < 15);
+      if (allVeryLowStdev) {
         score += 1;
         flags.push('suspiciously_uniform_channels');
+      } else if (allLowStdev) {
+        score += 0.5;
+        flags.push('low_contrast_channels');
       }
     }
 

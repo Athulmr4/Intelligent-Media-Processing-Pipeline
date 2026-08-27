@@ -13,8 +13,34 @@ export function errorHandler(err: Error, req: Request, res: Response, _next: Nex
     stack: err.stack,
   });
 
-  const statusCode = (err as any).statusCode || 500;
-  const message = statusCode === 500 ? 'Internal server error' : err.message;
+  // Handle Multer errors (file size, invalid type, etc.)
+  if ((err as any).code === 'LIMIT_FILE_SIZE') {
+    res.status(400).json({
+      success: false,
+      error: { message: `File too large. Max size: ${Math.round((err as any).limit / 1024 / 1024)}MB` },
+    });
+    return;
+  }
+  if ((err as any).code === 'LIMIT_UNEXPECTED_FILE' || err.message?.includes('Invalid file type')) {
+    res.status(400).json({
+      success: false,
+      error: { message: err.message },
+    });
+    return;
+  }
+  // Multer wraps fileFilter errors - handle generic multer errors as 400
+  if ((err as any).storageErrors || err.message?.includes('Unexpected field')) {
+    res.status(400).json({
+      success: false,
+      error: { message: err.message },
+    });
+    return;
+  }
+
+  const statusCode = (err as any).statusCode || (err as any).status || 500;
+  // Known client errors should expose message
+  const isClientError = statusCode >= 400 && statusCode < 500;
+  const message = isClientError ? err.message : 'Internal server error';
 
   res.status(statusCode).json({
     success: false,

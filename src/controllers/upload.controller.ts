@@ -31,7 +31,10 @@ const fileFilter = (_req: Request, file: Express.Multer.File, cb: multer.FileFil
   if (config.allowedMimeTypes.includes(file.mimetype)) {
     cb(null, true);
   } else {
-    cb(new Error(`Invalid file type: ${file.mimetype}. Allowed: ${config.allowedMimeTypes.join(', ')}`));
+    const err: any = new Error(`Invalid file type: ${file.mimetype}. Allowed: ${config.allowedMimeTypes.join(', ')}`);
+    err.statusCode = 400;
+    err.status = 400;
+    cb(err);
   }
 };
 
@@ -58,6 +61,19 @@ export async function uploadImage(req: Request, res: Response): Promise<void> {
 
     const file = req.file;
     const imageId = path.basename(file.filename, path.extname(file.filename));
+
+    // Validate that the file is a decodable image (catch corrupt headers early)
+    try {
+      const sharp = require('sharp');
+      await sharp(file.path).metadata();
+    } catch (e) {
+      fs.unlinkSync(file.path);
+      res.status(400).json({
+        success: false,
+        error: { message: `Invalid or corrupt image file: ${(e as Error).message}` },
+      });
+      return;
+    }
 
     // Calculate file hash for quick duplicate pre-check
     const fileBuffer = fs.readFileSync(file.path);

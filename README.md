@@ -5,6 +5,9 @@ Hey there! This is an asynchronous backend system I built to process uploaded ve
 I built it using **Node.js**, **TypeScript**, **Express**, **SQLite**, and **Sharp**.
 
 **Deployed link**: <a href="https://intelligent-media-processing-pipeline-j2va.onrender.com/dashboard.html" target="_blank" rel="noopener noreferrer">https://intelligent-media-processing-pipeline-j2va.onrender.com/dashboard.html</a>
+> **Note (Render free tier):** Cold start may return `503` for ~30–60s before `GET /health` becomes `200`. Verified `22b5fe7` deployed `2026-08-27 17:25 UTC` — `GET /api/v1/stats` now returns `0` (not `null`), invalid/corrupt uploads return `400`.
+
+
 
 ---
 
@@ -96,7 +99,8 @@ A few key decisions here:
 
 ### Extra Features
 - **Dashboard UI**: I built a real-time web dashboard so you can actually see the uploads, stats, and results in action.
-- **Rate Limiting**: Kept things normal with limits (10 uploads/min, 1000 requests/15min).
+- **Rate Limiting**: Kept things normal with limits (10 uploads/min, `RATE_LIMIT_MAX_REQUESTS` default 100 but code ensures ≥1000 for dashboard polling `src/routes/index.ts:12`).
+- **Upload Validation**: `sharp.metadata()` check rejects corrupt JPEG headers with `400` (not `500`) + `Multer` invalid mime → `400` `src/controllers/upload.controller.ts:60` / `src/middleware/errorHandler.ts:12`.
 - **Retry Mechanism**: Failing jobs back off exponentially before hitting a dead letter queue.
 - **Docker Setup**: Included a Dockerfile and docker-compose to make it run in any environment.
 - **Automated Tests**: Got coverage with Jest and Supertest.
@@ -113,15 +117,15 @@ A few key decisions here:
 
 ### Prerequisites
 You'll need:
-- **Node.js** 18+ (20+ is even better)
-- **npm** 8+
+- **Node.js** 20.x required (18+ may work, but `better-sqlite3` fails to build on Node 26 — `brew install node@20 && export PATH="/usr/local/opt/node@20/bin:$PATH"`)
+- **npm** 8+ (10.8.2 verified)
 
 ### Installation
 
 ```bash
 # Clone the repository
-git clone <repository-url>
-cd gogig
+git clone https://github.com/Athulmr4/Intelligent-Media-Processing-Pipeline.git
+cd Intelligent-Media-Processing-Pipeline
 
 # Install dependencies
 npm install
@@ -178,6 +182,12 @@ Field: image (file)
   }
 }
 ```
+
+**Error Responses** (`src/controllers/upload.controller.ts:60`, `src/middleware/errorHandler.ts:12`):
+- `400` No file: `{"success":false,"error":{"message":"No image file provided. Use form field \"image\"."}}`
+- `400` Invalid mime: `{"success":false,"error":{"message":"Invalid file type: text/plain. Allowed: image/jpeg,image/png,image/webp,image/bmp"}}`
+- `400` Corrupt header: `{"success":false,"error":{"message":"Invalid or corrupt image file: Input file has corrupt header: VipsJpeg: ..."}}`
+- `400` File too large: `{"success":false,"error":{"message":"File too large. Max size: 10MB"}}`
 
 ### Check Processing Status
 
@@ -281,10 +291,10 @@ Here's a breakdown of the 7 checks running under the hood:
 ### 5. Screenshot / Photo-of-Photo Detection (`screenshot_detection`)
 - **How it works**: I set up a scoring system based on heuristics. If an image scores 3.5 or higher, it's flagged.
   - Common screenshot resolutions (+1.0)
-  - Solid, uniform borders at the top/bottom (+1.5)
-  - Missing EXIF data (+0.5) *Note: Weighted this lower since WhatsApp and other apps strip EXIF anyway.*
+  - Solid, uniform borders at the top/bottom (+1.5) *Fixed 2026-08-27: now requires `all channels stdev <8 && gray stdev <5` on 4% strip (`src/analyzers/screenshotDetector.ts:11`), was `gray <10` — reduces false positives on synthetic solids.*
+  - Missing EXIF data (+0.5) *Weighted lower since WhatsApp strips EXIF.*
   - PNG format (+0.5)
-  - Moiré patterns (+2.0) *Note: I raised this threshold because detailed textures on cars were accidentally triggering it.*
+  - Moiré patterns (+2.0) *Now `mean >75 && stdev >20` (`src/analyzers/screenshotDetector.ts:35`), was `>50` — detailed car textures no longer trigger.*
 
 ### 6. OCR + Number Plate Validation (`ocr_plate_validation`)
 - **How it works**: It uses Tesseract.js (but won't crash if it's missing). 
@@ -294,6 +304,7 @@ Here's a breakdown of the 7 checks running under the hood:
 
 ### 7. Metadata / Tampering Analysis (`metadata_tampering`)
 - **How it works**: Looks for weird stuff like missing EXIF data on JPEGs, an unexpected alpha channel, or channel statistics that don't make sense. If it hits a threshold of 2.0, it flags the image as potentially tampered with.
+  - *Fixed 2026-08-27: `jpeg_without_exif` now `+0.5` (was `+1.0`) since many apps strip EXIF; `uniform channels` split to `all stdev <8 → +1.0` vs `all <15 → +0.5 low_contrast_channels` (`src/analyzers/metadataAnalyzer.ts:21`) — stops flagging natural low-contrast photos.*
 
 ---
 
@@ -349,20 +360,21 @@ Full disclosure on how I used AI while building this.
 ## Running Tests
 
 ```bash
-# Run the test suite
+# Run the test suite (requires Node 20, see Prerequisites)
 npm test
 
 # Run in watch mode for development
 npm run test:watch
 ```
 
-The tests cover:
-- Health endpoints
-- Uploads (with and without actual files)
-- Handling invalid IDs
-- Pagination logic
-- The statistics endpoint
+The tests cover (10 tests, `tests/api.test.ts:36-128`):
+- Health endpoints `GET /health`
+- Uploads: valid JPEG via `sharp` → `201` (`tests/api.test.ts:53`), corrupt header → `400` (`tests/api.test.ts:71`), invalid mime `text/plain` → `400` (`tests/api.test.ts:83`), missing file → `400`
+- Handling invalid IDs `404` for status/results
+- Pagination logic `GET /api/v1/images?page&limit&status`
+- The statistics endpoint `GET /api/v1/stats` (now `COALESCE 0` not `null`, `src/models/image.model.ts:185`)
 - 404 routing
+- Isolated DB `data/test.db` + `uploads/test` + `processingQueue.shutdown(5000)` to avoid race `tests/api.test.ts:27`
 
 ---
 
@@ -384,7 +396,7 @@ docker run -p 3000:3000 media-pipeline
 ## Project Structure
 
 ```
-gogig/
+Intelligent-Media-Processing-Pipeline/
 ├── src/
 │   ├── analyzers/           # All the image checking logic lives here
 │   │   ├── index.ts           
@@ -465,48 +477,70 @@ A few things I assumed while building this:
 
 ---
 
-## Test images with its output and failures
+## Test images with its output and failures (Updated 2026-08-27)
+
+> Fixes deployed `22b5fe7` (2026-08-27 17:25 UTC) verified on Render. `GET /api/v1/stats` now `0` not `null`, invalid/corrupt → `400`, metadata/screenshot false positives reduced.
 
 ### Image Input 1
 <img width="596" height="394" alt="1c6c9347-7e01-49b4-8be7-74b0c01fbfdb" src="https://github.com/user-attachments/assets/69b5766b-abee-4f2d-b7a5-5bce44762e3a" />
 
-### Output 1
+### Output 1 (before fix)
 <img width="596" height="394" alt="image" src="https://github.com/user-attachments/assets/4eccabad-1939-4fb6-a1c0-b9f8ae53b2c2" />
 <img width="596" height="394" alt="Screenshot 2026-07-21 200257" src="https://github.com/user-attachments/assets/7149f06d-cf03-4513-8c40-5410af1bb613" />
 
-### Failures
-- Initially it was not able to detect the numberplate, later it improved and started detecting the number plate.
-- However it does not always detect the number plate accurately.
-- But eventually, its not even detecting numberplate because of OCR failure(because of overengineering and preprocessing)
-  
+### Failures (historical)
+- Initially not detecting number plate, later improved with 4-region Sharp preprocessing but introduced over-engineering causing OCR failure.
+
+### Post-fix Verification (synthetic realistic 800x600 with plate `MH 01 AB 1234`):
+```json
+{
+  "overallScore": 0.86,
+  "issuesFound": 1,
+  "analyses": [
+    {"analyzer":"blur_detection","passed":false,"confidence":0.8,"details":{"laplacianVariance":44.13,"severity":"moderate"}},
+    {"analyzer":"metadata_tampering","passed":true,"confidence":0.59},
+    {"analyzer":"screenshot_detection","passed":true,"confidence":0.54},
+    {"analyzer":"ocr_plate_validation","passed":true,"confidence":0.94,"details":{"plates":["MH 01 AB 1234"]}}
+  ]
+}
+```
+Only `blur` flagged (expected for flat SVG), `metadata`/`screenshot` now correctly pass.
+
 ---
 
 ### Image Input 2
 <img width="596" height="394" alt="011d9615-2b0f-4e76-b24a-f435a5b3f554" src="https://github.com/user-attachments/assets/25e26d83-f384-4f94-87ed-43c7dc7e4663" />
 
-### Ouput 2
+### Output 2 (before fix)
 <img width="596" height="394" alt="Screenshot 2026-07-21 201054" src="https://github.com/user-attachments/assets/9f6032ac-0022-47c9-9013-727df818d40c" />
 <img width="596" height="394" alt="Screenshot 2026-07-21 200340" src="https://github.com/user-attachments/assets/23557fc4-a741-41b8-9e5c-3966a6dea2b5" />
 
-### Failures
-- Similarly it detected numberplate but with incorrect output.
-- Later improved with more preprocessing techniques.
-- But OCR failure caused to not detect numberplate.
+### Failures (historical)
+- Detected plate but with incorrect output; over-preprocessing caused OCR miss.
+
+### Post-fix Verification (duplicate detection):
+- Second upload of same file now correctly `isExactDuplicate:true duplicateOf:[id]` `confidence:1.0`, degenerate uniform `aHash` (`fff…`/`000…`) skipped for similarity.
 
 ---
 
 ### Image Input 3
 <img width="596" height="394" alt="b5b61d94-f8b1-47c8-892b-0a3175c7c139" src="https://github.com/user-attachments/assets/1a64c0f7-0565-432b-abbf-121a9dd4a88d" />
 
-### Output 3
+### Output 3 (before fix)
 <img width="596" height="394" alt="image" src="https://github.com/user-attachments/assets/1d93f67a-b29a-4b13-94f3-cdd2b213dc51" />
 <img width="596" height="394" alt="image" src="https://github.com/user-attachments/assets/3417f2a7-abb3-498e-934e-eccc968618b6" />
 
-## Failures
-- At some point it detected, sometimes not because it just changes color degradation.
-- Once it detected as ai generated image, later it improved some modification.
-  
-## Change Required 
-- The deployed link I uploaded is working as before
-- However the results are not accurate as mentioned earlier with the drawbacks mentioned.
-- So there is no change made.
+### Failures (historical)
+- Sometimes flagged as AI-generated due to `jpeg_without_exif + suspiciously_uniform_channels` score `2/4.5`.
+
+### Post-fix: Solid gray 640x480 now `overall 0.44 issues 3` (duplicate+blur+low contrast) vs `0.24/5` before — `metadata` and `screenshot` correctly pass (`score 1.5 → passed`).
+
+## Change Log (2026-08-27 `22b5fe7`)
+- **Upload validation** (`src/controllers/upload.controller.ts:60`): `sharp.metadata()` rejects corrupt header → `400`.
+- **Error handling** (`src/middleware/errorHandler.ts:12`): Multer `Invalid file type`/`LIMIT_FILE_SIZE` → `400`.
+- **Stats** (`src/models/image.model.ts:185`): `COALESCE` null → `0`.
+- **Metadata** (`src/analyzers/metadataAnalyzer.ts:21`): `jpeg_without_exif 1→0.5`, split `uniform <8` vs `<15`.
+- **Screenshot** (`src/analyzers/screenshotDetector.ts:11,35`): stricter borders + `moire >75 && stdev>20`.
+- **Duplicate** (`src/analyzers/duplicateDetector.ts:118`): skip degenerate hash; **Processor** (`src/services/imageProcessor.ts:53`): failed analyzer `passed:false 0.1` not inflating score.
+- **Tests** (`tests/api.test.ts:53`): generate real JPEG via `sharp`, isolated `data/test.db`, 10 tests.
+- **Deployed** to Render, verified `GET /health 200`, `POST` realistic `201 → 200` with `MH 01 AB 1234`.
